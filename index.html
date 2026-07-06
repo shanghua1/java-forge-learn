@@ -45,6 +45,16 @@
     .qa-send{padding:0.5rem 1rem;background:var(--accent2);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:500}
     .qa-send:hover{opacity:0.85}
     .qa-send:disabled{opacity:0.5;cursor:not-allowed}
+    .qa-toggle-row{display:flex;gap:0.3rem;padding:0.4rem 1rem;border-bottom:1px solid var(--border-light)}
+    .qa-toggle-btn{font-family:inherit;font-size:0.75rem;padding:0.2rem 0.6rem;border:1px solid var(--border);border-radius:12px;background:var(--bg);color:var(--text-muted);cursor:pointer;transition:all 0.15s}
+    .qa-toggle-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+    .qa-toggle-btn.active{background:rgba(139,107,181,0.1);border-color:var(--accent2);color:var(--accent2)}
+    .qa-thinking{background:rgba(155,142,196,0.06);border:1px dashed var(--lavender);border-radius:8px;padding:0.6rem 0.8rem;margin:0.4rem 0;font-size:0.82rem;color:var(--text-muted);line-height:1.6;max-height:200px;overflow-y:auto}
+    .qa-thinking-label{font-size:0.78rem;color:var(--accent2);font-weight:600;cursor:pointer;margin-bottom:0.3rem;user-select:none}
+    .qa-thinking-label::before{content:'▶ ';font-size:0.7rem}
+    .qa-thinking-label.open::before{content:'▼ '}
+    .qa-thinking-body{display:none}
+    .qa-thinking-body.show{display:block}
     .qa-quick{display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem 1rem;border-top:1px solid var(--border-light)}
     .qa-quick-btn{font-family:inherit;font-size:0.78rem;padding:0.3rem 0.7rem;border:1px solid var(--border);border-radius:14px;background:var(--bg);color:var(--text-muted);cursor:pointer;transition:all 0.15s}
     .qa-quick-btn:hover{border-color:var(--accent2);color:var(--accent2)}
@@ -212,6 +222,10 @@
                 <button class="qa-header-btn" onclick="qaCompress()" title="压缩会话">压缩</button>
                 <button class="qa-header-btn" onclick="qaClear()" title="清空当前会话">清空</button>
             </div>
+        </div>
+        <div class="qa-toggle-row">
+            <button class="qa-toggle-btn active" id="qaStreamToggle" onclick="qaToggleStream()">⚡ 流式</button>
+            <button class="qa-toggle-btn" id="qaSearchToggle" onclick="qaToggleSearch()">🔍 联网</button>
         </div>
         <div class="qa-messages" id="qaMessages"></div>
         <div class="qa-quick" id="qaQuick"></div>
@@ -835,16 +849,45 @@ function restoreAICodefix(lid){var saved=loadAICodefix(lid);if(!saved.length)ret
 function aiCodefixGen(lid){var c=COURSE[lid-1],area=document.getElementById('codefixArea'+lid),ld=document.createElement('div');ld.id='aiCodefixLoading';ld.className='ai-status';ld.textContent='⏳ AI 正在出题...';area.appendChild(ld);var existingQ=c.codefix.map(function(cf){return cf.prompt}).join('\n');aiCall([{role:'system',content:AI_CONFIG.quizGenPrompt.replace('选择题','改错练习题')+'\nJSON：[{"prompt":"题目","buggy":"错误代码","fixed":"正确代码","hint":"提示","review":"解析"}]'},{role:'user',content:'第'+lid+'课「'+c.title+'」\n内容：'+c.content.replace(/<[^>]+>/g,'').substring(0,600)+'\n\n已有：\n'+existingQ}],function(result,err){var l=document.getElementById('aiCodefixLoading');if(l)l.remove();if(err){area.innerHTML+='<div style="color:var(--accent3);font-size:0.85rem">❌ '+err+'</div>';return}try{var questions=JSON.parse(result.match(/\[[\s\S]*\]/)[0]);questions.forEach(function(q){q.ai=true});saveAICodefix(lid,questions);questions.forEach(function(q){c.codefix.push(q)});var tp=Math.ceil(c.codefix.length/3);codefixPages[lid]=tp-1;renderCodefixPage(lid)}catch(ex){area.innerHTML+='<div style="color:var(--accent3);font-size:0.85rem">❌ 解析失败</div>'}})}
 
 // ── AI Integration ──
+var QA_STREAM_ENABLED=true,QA_SEARCH_ENABLED=false;
 function detectProtocol(url){if(/anthropic/i.test(url))return'anthropic';return'openai'}
 function normalizeUrl(url,proto){if(proto==='anthropic'){if(!/\/v1\/messages\/?$/.test(url)){url=url.replace(/\/+$/,'');if(!/\/v1$/.test(url))url+='/v1';url+='/messages'}return url}if(!/\/chat\/completions\/?$/.test(url)){url=url.replace(/\/+$/,'');if(!/\/v1$/.test(url))url+='/v1';url+='/chat/completions'}return url}
 function getHeaders(key,proto){if(proto==='anthropic')return{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'};return{'Content-Type':'application/json','Authorization':'Bearer '+key}}
-function buildRequestBody(proto,model,msgs){if(proto==='anthropic'){var sys='',user=[];msgs.forEach(function(m){if(m.role==='system')sys+=m.content+'\n';else user.push({role:m.role,content:m.content})});var body={model:model,messages:user};if(sys.trim())body.system=sys.trim();return body}return{model:model,messages:msgs}}
+function buildRequestBody(proto,model,msgs,stream){if(proto==='anthropic'){var sys='',user=[];msgs.forEach(function(m){if(m.role==='system')sys+=m.content+'\n';else user.push({role:m.role,content:m.content})});var body={model:model,messages:user,max_tokens:16384};if(sys.trim())body.system=sys.trim();return body}var body={model:model,messages:msgs};if(stream)body.stream=true;return body}
 function extractReply(proto,data){if(proto==='anthropic'){if(data.content&&data.content[0]&&data.content[0].text)return data.content[0].text;return null}if(data.choices&&data.choices[0]&&data.choices[0].message){var msg=data.choices[0].message;if(msg.content&&msg.content.trim())return msg.content;if(msg.reasoning_content&&msg.reasoning_content.trim())return'[思考过程]\n'+msg.reasoning_content+'\n\n[提示] 正式回答被截断，请重试';if(data.choices[0].finish_reason==='length')return null;return null}return null}
 
 function aiCall(messages,callback){
     if(!CFG.url||!CFG.key){callback(null,'请先在右上角 ⚙️ 设置中配置 API');return}
-    var proto=detectProtocol(CFG.url),finalUrl=normalizeUrl(CFG.url,proto),headers=getHeaders(CFG.key,proto),body=buildRequestBody(proto,CFG.model||'mimo-v2.5-pro',messages);
+    var proto=detectProtocol(CFG.url),finalUrl=normalizeUrl(CFG.url,proto),headers=getHeaders(CFG.key,proto),body=buildRequestBody(proto,CFG.model||'mimo-v2.5-pro',messages,false);
     fetch(finalUrl,{method:'POST',headers:headers,body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(d){var reply=extractReply(proto,d);if(reply)callback(reply,null);else if(d.error)callback(null,'API 错误：'+(d.error.message||JSON.stringify(d.error)));else callback(null,'API 返回异常：'+JSON.stringify(d).substring(0,500))}).catch(function(e){callback(null,'请求失败：'+e.message)})
+}
+
+function aiCallStream(messages,onChunk,onDone){
+    if(!CFG.url||!CFG.key){onDone('请先在右上角 ⚙️ 设置中配置 API');return}
+    var proto=detectProtocol(CFG.url),finalUrl=normalizeUrl(CFG.url,proto),headers=getHeaders(CFG.key,proto),body=buildRequestBody(proto,CFG.model||'mimo-v2.5-pro',messages,true);
+    fetch(finalUrl,{method:'POST',headers:headers,body:JSON.stringify(body)}).then(function(response){
+        if(!response.ok){response.text().then(function(t){onDone('HTTP '+response.status+': '+t.substring(0,200))});return}
+        var reader=response.body.getReader(),decoder=new TextDecoder(),buffer='',reasoning='',content='';
+        function read(){reader.read().then(function(result){
+            if(result.done){onDone(null,reasoning,content);return}
+            buffer+=decoder.decode(result.value,{stream:true});
+            var lines=buffer.split('\n');buffer=lines.pop();
+            lines.forEach(function(line){
+                line=line.trim();if(!line||!line.startsWith('data:'))return;
+                var data=line.substring(5).trim();if(data==='[DONE]')return;
+                try{
+                    var json=JSON.parse(data);
+                    if(json.choices&&json.choices[0]){
+                        var delta=json.choices[0].delta||{};
+                        if(delta.reasoning_content){reasoning+=delta.reasoning_content;onChunk('reasoning',delta.reasoning_content,reasoning,content)}
+                        if(delta.content){content+=delta.content;onChunk('content',delta.content,reasoning,content)}
+                    }
+                }catch(e){}
+            });
+            read();
+        }).catch(function(e){onDone('读取失败：'+e.message)})}
+        read();
+    }).catch(function(e){onDone('请求失败：'+e.message)})
 }
 
 // ── AI Quiz ──
@@ -913,7 +956,76 @@ function renderQuickBtns(){var el=document.getElementById('qaQuick'),html='';AI_
 
 function qaRenderMessages(){var box=document.getElementById('qaMessages'),conv=qaConversations[qaCurrentConv];if(!conv||!conv.messages.length){box.innerHTML='<div class="qa-msg ai" style="font-size:0.85rem;color:var(--text-muted)">你好！有什么问题可以问我。</div>';return}var html='';conv.messages.forEach(function(m){var type=m.role==='user'?'user':'ai';html+='<div class="qa-msg '+(type==='ai'?'ai':'user')+'">'+(type==='ai'?md(m.content):esc(m.content))+'</div>'});box.innerHTML=html;box.querySelectorAll('pre code').forEach(function(b){b.innerHTML=hl(b.textContent)});box.scrollTop=box.scrollHeight}
 
-function qaAsk(){var input=document.getElementById('qaInput'),q=input.value.trim();if(!q)return;input.value='';var conv=qaConversations[qaCurrentConv];conv.messages.push({role:'user',content:q});if(conv.messages.length===1)conv.title=q.substring(0,20);qaSave();qaAddMsg(q,'user');qaAddMsg('⏳ 思考中...','ai',true);var c=COURSE[currentLesson],context='用户正在学习第'+c.id+'课「'+c.title+'」';var skillCtx=getSkillContext();var apiMsgs=[{role:'system',content:AI_CONFIG.qaSystemPrompt+skillCtx}];conv.messages.forEach(function(m){apiMsgs.push({role:m.role,content:m.content})});apiMsgs[apiMsgs.length-1]={role:'user',content:context+'\n\n问题：'+q};aiCall(apiMsgs,function(result,err){qaRemoveLoading();if(err){qaAddMsg('❌ '+err,'ai');return}conv.messages.push({role:'assistant',content:result});qaSave();qaAddMsg(result,'ai')})}
+function qaAsk(){
+    var input=document.getElementById('qaInput'),q=input.value.trim();if(!q)return;input.value='';
+    var conv=qaConversations[qaCurrentConv];conv.messages.push({role:'user',content:q});
+    if(conv.messages.length===1)conv.title=q.substring(0,20);qaSave();qaAddMsg(q,'user');
+    var c=COURSE[currentLesson],context='用户正在学习第'+c.id+'课「'+c.title+'」';
+    var skillCtx=getSkillContext();
+    var sysPrompt=AI_CONFIG.qaSystemPrompt+skillCtx;
+    if(QA_SEARCH_ENABLED)sysPrompt+='\n\n[联网搜索已开启] 请在回答前搜索最新信息，标注信息来源。如果不确定，明确告知用户。';
+    var apiMsgs=[{role:'system',content:sysPrompt}];
+    conv.messages.forEach(function(m){apiMsgs.push({role:m.role,content:m.content})});
+    apiMsgs[apiMsgs.length-1]={role:'user',content:context+'\n\n问题：'+q};
+    if(QA_STREAM_ENABLED){
+        qaStreamReply(conv,apiMsgs);
+    }else{
+        qaAddMsg('⏳ 思考中...','ai',true);
+        aiCall(apiMsgs,function(result,err){qaRemoveLoading();if(err){qaAddMsg('❌ '+err,'ai');return}conv.messages.push({role:'assistant',content:result});qaSave();qaAddMsg(result,'ai')})
+    }
+}
+
+function qaStreamReply(conv,apiMsgs){
+    var box=document.getElementById('qaMessages');
+    var msgDiv=document.createElement('div');msgDiv.className='qa-msg ai';
+    var thinkingDiv=document.createElement('div');thinkingDiv.className='qa-thinking';thinkingDiv.style.display='none';
+    var thinkingLabel=document.createElement('div');thinkingLabel.className='qa-thinking-label';thinkingLabel.textContent='💭 思考中...';
+    thinkingLabel.onclick=function(){var body=thinkingDiv.querySelector('.qa-thinking-body');if(body)body.classList.toggle('show');thinkingLabel.classList.toggle('open')};
+    var thinkingBody=document.createElement('div');thinkingBody.className='qa-thinking-body';
+    thinkingDiv.appendChild(thinkingLabel);thinkingDiv.appendChild(thinkingBody);
+    var contentDiv=document.createElement('div');contentDiv.className='qa-stream-content';
+    msgDiv.appendChild(thinkingDiv);msgDiv.appendChild(contentDiv);
+    var loadDiv=document.createElement('div');loadDiv.id='qaLoading';loadDiv.className='qa-msg ai';loadDiv.textContent='⏳ 思考中...';
+    box.appendChild(loadDiv);box.scrollTop=box.scrollHeight;
+    var reasoning='',content='';
+    aiCallStream(apiMsgs,
+        function(type,delta,rFull,cFull){
+            var ld=document.getElementById('qaLoading');if(ld)ld.remove();
+            if(type==='reasoning'){
+                reasoning=rFull;thinkingDiv.style.display='block';
+                thinkingLabel.textContent='💭 思考中... ('+reasoning.length+'字)';
+                thinkingBody.innerHTML=md(reasoning);
+                box.scrollTop=box.scrollHeight;
+            }
+            if(type==='content'){
+                content=cFull;contentDiv.innerHTML=md(content);
+                contentDiv.querySelectorAll('pre code').forEach(function(b){b.innerHTML=hl(b.textContent)});
+                box.scrollTop=box.scrollHeight;
+            }
+        },
+        function(err,rFinal,cFinal){
+            var ld=document.getElementById('qaLoading');if(ld)ld.remove();
+            if(err){qaAddMsg('❌ '+err,'ai');return}
+            if(rFinal)thinkingLabel.textContent='💭 思考完成 ('+rFinal.length+'字)';
+            if(cFinal){conv.messages.push({role:'assistant',content:cFinal});qaSave()}
+            else if(rFinal&&!cFinal){thinkingLabel.textContent='💭 思考完成但未生成回答，请重试'}
+            box.appendChild(msgDiv);box.scrollTop=box.scrollHeight;
+        }
+    );
+}
+
+function qaToggleStream(){
+    QA_STREAM_ENABLED=!QA_STREAM_ENABLED;
+    var btn=document.getElementById('qaStreamToggle');
+    btn.classList.toggle('active',QA_STREAM_ENABLED);
+    btn.textContent=QA_STREAM_ENABLED?'⚡ 流式':'⚡ 非流式';
+}
+function qaToggleSearch(){
+    QA_SEARCH_ENABLED=!QA_SEARCH_ENABLED;
+    var btn=document.getElementById('qaSearchToggle');
+    btn.classList.toggle('active',QA_SEARCH_ENABLED);
+    btn.textContent=QA_SEARCH_ENABLED?'🔍 联网':'🔍 离线';
+}
 
 function qaQuick(q){document.getElementById('qaInput').value=q;qaAsk()}
 function qaAddMsg(text,type,isLoading){var box=document.getElementById('qaMessages'),div=document.createElement('div');div.className='qa-msg '+(type==='user'?'user':'ai');if(isLoading)div.id='qaLoading';if(type==='ai'){div.innerHTML=md(text);div.querySelectorAll('pre code').forEach(function(b){b.innerHTML=hl(b.textContent)})}else{div.textContent=text}box.appendChild(div);box.scrollTop=box.scrollHeight}
