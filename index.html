@@ -59,6 +59,19 @@
     .lesson-btn:hover{background:rgba(91,138,114,0.06)}
     .lesson-btn.active{background:rgba(91,138,114,0.1);color:var(--accent);font-weight:600}
     .lesson-btn .num{color:var(--text-muted);font-size:0.8rem;margin-right:0.3rem}
+    .sidebar-panel{margin-top:0.8rem;border-top:1px solid var(--border-light);padding-top:0.6rem}
+    .sidebar-panel-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:0.5rem 0.8rem;border:none;background:transparent;font-family:inherit;font-size:0.85rem;color:var(--text-muted);border-radius:8px;cursor:pointer;transition:all 0.15s}
+    .sidebar-panel-toggle:hover{background:rgba(91,138,114,0.04);color:var(--text)}
+    .sidebar-panel-toggle .arrow{transition:transform 0.2s;font-size:0.7rem}
+    .sidebar-panel-toggle.open .arrow{transform:rotate(90deg)}
+    .sidebar-panel-body{display:none;padding:0.6rem 0.8rem;font-size:0.78rem;color:var(--text-muted);line-height:1.7;max-height:50vh;overflow-y:auto}
+    .sidebar-panel-body.show{display:block}
+    .sidebar-panel-body h4{font-size:0.82rem;color:var(--accent);margin:0.8rem 0 0.3rem;font-weight:600}
+    .sidebar-panel-body h4:first-child{margin-top:0}
+    .sidebar-panel-body ul{padding-left:1.1rem;margin:0.2rem 0}
+    .sidebar-panel-body li{margin:0.2rem 0}
+    .sidebar-panel-body code{font-size:0.76rem;padding:0.1em 0.3em}
+    .sidebar-panel-body .tree{font-family:'JetBrains Mono',monospace;font-size:0.74rem;line-height:1.6;white-space:pre;background:var(--bg);border-radius:6px;padding:0.6rem 0.8rem;margin:0.4rem 0;border:1px solid var(--border-light);overflow-x:auto}
     .settings-btn{position:fixed;top:1rem;right:1rem;background:var(--bg-card);border:1.5px solid var(--border);border-radius:10px;padding:0.5rem 1rem;cursor:pointer;font-family:inherit;font-size:0.85rem;color:var(--text-muted);z-index:100;transition:all 0.2s}
     .settings-btn:hover{border-color:var(--accent);color:var(--accent)}
     .skill-btn{position:fixed;top:1rem;right:7rem;background:var(--bg-card);border:1.5px solid var(--border);border-radius:10px;padding:0.5rem 1rem;cursor:pointer;font-family:inherit;font-size:0.85rem;color:var(--text-muted);z-index:100;transition:all 0.2s}
@@ -570,10 +583,86 @@ function renderSidebar(){
     });
     html+='<div style="margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border-light)">';
     html+='<button class="lesson-btn" style="color:var(--accent3);font-size:0.82rem" onclick="resetProgress()">🗑️ 重置所有进度</button></div>';
+
+    // ── 基础知识 ──
+    html+='<div class="sidebar-panel"><button class="sidebar-panel-toggle" onclick="toggleSidebarPanel(this)"><span>📖 基础知识</span><span class="arrow">▶</span></button>';
+    html+='<div class="sidebar-panel-body">';
+    html+='<h4>🐘 项目构建 — Gradle</h4>';
+    html+='<p>Forge 模组使用 <strong>Gradle</strong>（小象🐘图标）作为构建工具。</p>';
+    html+='<ul><li><code>build.gradle</code> — 构建配置，定义依赖和版本</li>';
+    html+='<li><code>settings.gradle</code> — 项目名称设置</li>';
+    html+='<li><code>gradlew</code> / <code>gradlew.bat</code> — Gradle Wrapper 脚本</li></ul>';
+    html+='<p>常用命令：</p>';
+    html+='<div class="tree">gradlew build          # 构建模组 jar
+gradlew runClient      # 启动测试客户端
+gradlew runServer      # 启动测试服务器
+gradlew genEclipseRuns # 生成 Eclipse 配置
+gradlew genIntellijRuns # 生成 IDEA 配置</div>';
+
+    html+='<h4>📄 模组配置 — mods.toml</h4>';
+    html+='<p>模组的「身份证」，在 <code>src/main/resources/META-INF/mods.toml</code> 中：</p>';
+    html+='<div class="tree">modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+
+[[mods]]
+modId="mymod"          # 模组 ID（唯一）
+version="1.0.0"        # 版本号
+displayName="我的模组"   # 显示名称
+description=\'\'\'简介内容\'\'\'  # 模组描述
+
+[[dependencies.mymod]]
+modId="forge"
+mandatory=true
+versionRange="[47,)"
+ordering="NONE"
+side="BOTH"</div>';
+
+    html+='<h4>📁 标准目录结构</h4>';
+    html+='<div class="tree">mymod/
+├── build.gradle
+├── settings.gradle
+├── gradlew / gradlew.bat
+└── src/main/
+    ├── java/com/example/mymod/
+    │   └── MyMod.java          # 主类（@Mod 注解）
+    └── resources/
+        ├── META-INF/
+        │   └── mods.toml       # 模组配置
+        ├── pack.mcmeta          # 资源包版本
+        └── assets/mymod/
+            ├── lang/            # 语言文件
+            ├── textures/        # 贴图
+            └── models/          # 模型</div>';
+
+    html+='<h4>🏷️ 主类注解</h4>';
+    html+='<div class="tree">@Mod("mymod")          // 必须和 mods.toml 的 modId 一致
+public class MyMod {
+    public MyMod() {
+        // 注册事件监听
+        IEventBus bus = FMLJavaModLoadingContext
+            .get().getModEventBus();
+        // 在这里注册物品、方块等
+    }
+}</div>';
+    html+='</div></div>';
+
+    // ── 免责声明 ──
+    html+='<div class="sidebar-panel"><button class="sidebar-panel-toggle" onclick="toggleSidebarPanel(this)"><span>⚠️ 免责声明</span><span class="arrow">▶</span></button>';
+    html+='<div class="sidebar-panel-body">';
+    html+='<p><strong>本页面由 AI 自动生成</strong>，内容仅参考了相关 Skill 文档及网络资源，<strong>不对内容的准确性、完整性做任何保证</strong>。</p>';
+    html+='<p>学习过程中如遇 Bug 或疑问，建议：</p>';
+    html+='<ul><li>查阅 <a href="https://docs.minecraftforge.net" target="_blank" style="color:var(--accent)">Forge 官方文档</a></li>';
+    html+='<li>参考 <a href="https://mcforge.readthedocs.io" target="_blank" style="color:var(--accent)">Forge 社区教程</a></li>';
+    html+='<li>向有经验的模组开发者请教</li></ul>';
+    html+='<p style="margin-top:0.6rem;color:var(--accent3)">⚠️ 本页面作者不对使用本页面内容造成的任何问题负责。</p>';
+    html+='</div></div>';
+
     sb.innerHTML=html;
 }
 
 function resetProgress(){if(confirm('确定要重置所有学习进度吗？')){localStorage.removeItem(PROGRESS_KEY);currentLesson=0;renderSidebar();renderLesson()}}
+function toggleSidebarSection(id){var el=document.getElementById(id),arrow=document.getElementById(id+'Arrow');if(!el)return;if(el.style.display==='none'){el.style.display='block';if(arrow)arrow.textContent='▼'}else{el.style.display='none';if(arrow)arrow.textContent='▶'}}
 
 // ── Render Lesson ──
 function goLesson(idx){currentLesson=idx;saveProgress();renderSidebar();renderLesson();setTimeout(function(){var c=COURSE[currentLesson];restoreAIQuizzes(c.id);restoreAICodefix(c.id);initCodefixEditors(c.id);if(c.quizzes){for(var i=0;i<c.quizzes.length;i++)restoreQuizState(c.id,i)}if(c.practice)restorePracticeState(c.id)},100)}
