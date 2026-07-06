@@ -966,19 +966,75 @@ function qaAsk(){
     var apiMsgs=[{role:'system',content:sysPrompt}];
     conv.messages.forEach(function(m){apiMsgs.push({role:m.role,content:m.content})});
     apiMsgs[apiMsgs.length-1]={role:'user',content:context+'\n\n问题：'+q};
-    if(QA_SEARCH_ENABLED){
-        qaAddMsg('🔍 正在搜索...','ai',true);
-        webSearch(q,function(results,err){
+
+    var urls=extractUrls(q);
+    var needSearch=QA_SEARCH_ENABLED;
+    var needFetch=urls.length>0;
+
+    if(needFetch){
+        qaAddMsg('🔗 正在抓取网页...','ai',true);
+        fetchWebPages(urls,function(pageResults){
             qaRemoveLoading();
-            if(results){
-                var searchCtx='\n\n[联网搜索结果]\n'+results;
-                apiMsgs[apiMsgs.length-1]={role:'user',content:context+searchCtx+'\n\n问题：'+q};
+            var extra='';
+            if(pageResults)extra+='\n\n[网页内容]\n'+pageResults;
+            if(needSearch){
+                qaAddMsg('🔍 正在搜索...','ai',true);
+                webSearch(q,function(searchResults){
+                    qaRemoveLoading();
+                    if(searchResults)extra+='\n\n[搜索结果]\n'+searchResults;
+                    apiMsgs[apiMsgs.length-1]={role:'user',content:context+extra+'\n\n问题：'+q};
+                    sendToAI(conv,apiMsgs);
+                });
+            }else{
+                apiMsgs[apiMsgs.length-1]={role:'user',content:context+extra+'\n\n问题：'+q};
+                sendToAI(conv,apiMsgs);
             }
-            if(QA_STREAM_ENABLED){qaStreamReply(conv,apiMsgs)}else{qaSendNormal(conv,apiMsgs)}
+        });
+    }else if(needSearch){
+        qaAddMsg('🔍 正在搜索...','ai',true);
+        webSearch(q,function(searchResults){
+            qaRemoveLoading();
+            if(searchResults)apiMsgs[apiMsgs.length-1]={role:'user',content:context+'\n\n[搜索结果]\n'+searchResults+'\n\n问题：'+q};
+            sendToAI(conv,apiMsgs);
         });
     }else{
-        if(QA_STREAM_ENABLED){qaStreamReply(conv,apiMsgs)}else{qaSendNormal(conv,apiMsgs)}
+        sendToAI(conv,apiMsgs);
     }
+}
+
+function sendToAI(conv,apiMsgs){
+    if(QA_STREAM_ENABLED){qaStreamReply(conv,apiMsgs)}else{qaSendNormal(conv,apiMsgs)}
+}
+
+function extractUrls(text){var regex=/https?:\/\/[^\s<>"')\]]+/g;var matches=text.match(regex);return matches?matches.slice(0,3):[]}
+
+function fetchWebPages(urls,callback){
+    var results=[],done=0;
+    urls.forEach(function(url){
+        fetchWebPage(url,function(text,err){
+            if(text)results.push('【'+url+'】\n'+text);
+            done++;
+            if(done>=urls.length){callback(results.length>0?results.join('\n\n'):null)}
+        });
+    });
+}
+
+function fetchWebPage(url,callback){
+    var proxy='https://api.allorigins.win/raw?url='+encodeURIComponent(url);
+    fetch(proxy).then(function(r){return r.text()}).then(function(html){
+        var text=htmlToText(html);
+        if(text.length>8000)text=text.substring(0,8000)+'\n...(内容过长，已截断)';
+        callback(text,null);
+    }).catch(function(e){callback(null,'抓取失败：'+e.message)})
+}
+
+function htmlToText(html){
+    var tmp=document.createElement('div');
+    tmp.innerHTML=html;
+    tmp.querySelectorAll('script,style,noscript,iframe,svg,head').forEach(function(el){el.remove()});
+    var text=tmp.textContent||tmp.innerText||'';
+    text=text.replace(/\s+/g,' ').replace(/\n\s*\n/g,'\n').trim();
+    return text;
 }
 
 function qaSendNormal(conv,apiMsgs){
