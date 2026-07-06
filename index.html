@@ -851,7 +851,7 @@ function aiCall(messages,callback){
 var aiQuizPages={};
 function saveAIQuizzes(lid,q){var p=loadProgress();p.aiQuizzes=p.aiQuizzes||{};p.aiQuizzes[lid]=(p.aiQuizzes[lid]||[]).concat(q);localStorage.setItem(PROGRESS_KEY,JSON.stringify(p))}
 function loadAIQuizzes(lid){var p=loadProgress();return(p.aiQuizzes&&p.aiQuizzes[lid])||[]}
-function restoreAIQuizzes(lid){var saved=loadAIQuizzes(lid);if(!saved.length)return;var c=COURSE[lid-1];saved.forEach(function(q){c.quizzes.push(q)});renderAIQuizPage(lid)}
+function restoreAIQuizzes(lid){var saved=loadAIQuizzes(lid);if(!saved.length)return;var c=COURSE[lid-1];var baseCount=c.quizzes.length-saved.length;if(baseCount<0)baseCount=0;c.quizzes.length=baseCount;saved.forEach(function(q){c.quizzes.push(q)});renderAIQuizPage(lid)}
 function cleanOpt(text){return text.replace(/^[A-Da-d0-9][\.\)）、]\s*/,'')}
 function renderQuizItem(lid,qi,q){var html='<div class="qq" id="q'+lid+'_'+qi+'"><p><strong>Q'+(qi+1)+(q.ai?' [AI]':'')+':</strong> '+mdInline(q.q)+'</p><div class="qo">';q.opts.forEach(function(opt,oi){html+='<button>'+String.fromCharCode(65+oi)+'. '+mdInline(cleanOpt(opt))+'</button>'});html+='</div><div class="qf" id="qf'+lid+'_'+qi+'"></div></div>';return html}
 
