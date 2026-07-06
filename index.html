@@ -963,16 +963,47 @@ function qaAsk(){
     var c=COURSE[currentLesson],context='用户正在学习第'+c.id+'课「'+c.title+'」';
     var skillCtx=getSkillContext();
     var sysPrompt=AI_CONFIG.qaSystemPrompt+skillCtx;
-    if(QA_SEARCH_ENABLED)sysPrompt+='\n\n[联网搜索已开启] 请在回答前搜索最新信息，标注信息来源。如果不确定，明确告知用户。';
     var apiMsgs=[{role:'system',content:sysPrompt}];
     conv.messages.forEach(function(m){apiMsgs.push({role:m.role,content:m.content})});
     apiMsgs[apiMsgs.length-1]={role:'user',content:context+'\n\n问题：'+q};
-    if(QA_STREAM_ENABLED){
-        qaStreamReply(conv,apiMsgs);
+    if(QA_SEARCH_ENABLED){
+        qaAddMsg('🔍 正在搜索...','ai',true);
+        webSearch(q,function(results,err){
+            qaRemoveLoading();
+            if(results){
+                var searchCtx='\n\n[联网搜索结果]\n'+results;
+                apiMsgs[apiMsgs.length-1]={role:'user',content:context+searchCtx+'\n\n问题：'+q};
+            }
+            if(QA_STREAM_ENABLED){qaStreamReply(conv,apiMsgs)}else{qaSendNormal(conv,apiMsgs)}
+        });
     }else{
-        qaAddMsg('⏳ 思考中...','ai',true);
-        aiCall(apiMsgs,function(result,err){qaRemoveLoading();if(err){qaAddMsg('❌ '+err,'ai');return}conv.messages.push({role:'assistant',content:result});qaSave();qaAddMsg(result,'ai')})
+        if(QA_STREAM_ENABLED){qaStreamReply(conv,apiMsgs)}else{qaSendNormal(conv,apiMsgs)}
     }
+}
+
+function qaSendNormal(conv,apiMsgs){
+    qaAddMsg('⏳ 思考中...','ai',true);
+    aiCall(apiMsgs,function(result,err){qaRemoveLoading();if(err){qaAddMsg('❌ '+err,'ai');return}conv.messages.push({role:'assistant',content:result});qaSave();qaAddMsg(result,'ai')})
+}
+
+function webSearch(query,callback){
+    var url='https://api.duckduckgo.com/?q='+encodeURIComponent(query)+'&format=json&no_html=1&skip_disambig=1&no_redirect=1';
+    fetch(url).then(function(r){return r.json()}).then(function(data){
+        var results=[];
+        if(data.Abstract&&data.Abstract.trim()){results.push('摘要：'+data.Abstract+(data.AbstractSource?' (来源：'+data.AbstractSource+')':''))}
+        if(data.AbstractURL){results.push('参考链接：'+data.AbstractURL)}
+        if(data.RelatedTopics&&data.RelatedTopics.length>0){
+            var topics=[];
+            data.RelatedTopics.slice(0,5).forEach(function(t){
+                if(t.Text)topics.push('- '+t.Text+(t.FirstURL?' ('+t.FirstURL+')':''));
+                if(t.Topics)t.Topics.slice(0,3).forEach(function(st){if(st.Text)topics.push('  - '+st.Text)});
+            });
+            if(topics.length)results.push('相关主题：\n'+topics.join('\n'));
+        }
+        if(data.Definition&&data.Definition.trim()){results.push('定义：'+data.Definition+(data.DefinitionSource?' (来源：'+data.DefinitionSource+')':''))}
+        if(results.length>0){callback(results.join('\n\n'),null)}
+        else{callback(null,'未找到相关结果')}
+    }).catch(function(e){callback(null,'搜索失败：'+e.message)})
 }
 
 function qaStreamReply(conv,apiMsgs){
