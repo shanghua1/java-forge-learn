@@ -624,7 +624,7 @@ function renderSidebar(){
 function resetProgress(){if(confirm('确定要重置所有学习进度吗？')){localStorage.removeItem(PROGRESS_KEY);currentLesson=0;renderSidebar();renderLesson()}}
 
 // ── Render Lesson ──
-function goLesson(idx){currentLesson=idx;saveProgress();renderSidebar();renderLesson();setTimeout(function(){var c=COURSE[currentLesson];restoreAIQuizzes(c.id);restoreAICodefix(c.id);initCodefixEditors(c.id);if(c.quizzes){for(var i=0;i<c.quizzes.length;i++)restoreQuizState(c.id,i)}if(c.practice)restorePracticeState(c.id)},100)}
+function goLesson(idx){currentLesson=idx;saveProgress();renderSidebar();renderLesson();window.scrollTo(0,0);setTimeout(function(){var c=COURSE[currentLesson];restoreAIQuizzes(c.id);restoreAICodefix(c.id);initCodefixEditors(c.id);if(c.quizzes){for(var i=0;i<c.quizzes.length;i++)restoreQuizState(c.id,i)}if(c.practice)restorePracticeState(c.id)},100)}
 
 function renderLesson(){
     var c=COURSE[currentLesson],m=document.getElementById('main');
