@@ -983,14 +983,13 @@ function qaStreamReply(conv,apiMsgs){
     thinkingLabel.onclick=function(){var body=thinkingDiv.querySelector('.qa-thinking-body');if(body)body.classList.toggle('show');thinkingLabel.classList.toggle('open')};
     var thinkingBody=document.createElement('div');thinkingBody.className='qa-thinking-body';
     thinkingDiv.appendChild(thinkingLabel);thinkingDiv.appendChild(thinkingBody);
-    var contentDiv=document.createElement('div');contentDiv.className='qa-stream-content';
+    var contentDiv=document.createElement('div');contentDiv.className='qa-stream-content';contentDiv.innerHTML='<span style="color:var(--text-muted);font-size:0.85rem">⏳ 生成中...</span>';
     msgDiv.appendChild(thinkingDiv);msgDiv.appendChild(contentDiv);
-    var loadDiv=document.createElement('div');loadDiv.id='qaLoading';loadDiv.className='qa-msg ai';loadDiv.textContent='⏳ 思考中...';
-    box.appendChild(loadDiv);box.scrollTop=box.scrollHeight;
-    var reasoning='',content='';
+    box.appendChild(msgDiv);box.scrollTop=box.scrollHeight;
+    var reasoning='',content='',started=false;
     aiCallStream(apiMsgs,
         function(type,delta,rFull,cFull){
-            var ld=document.getElementById('qaLoading');if(ld)ld.remove();
+            if(!started){started=true;contentDiv.innerHTML=''}
             if(type==='reasoning'){
                 reasoning=rFull;thinkingDiv.style.display='block';
                 thinkingLabel.textContent='💭 思考中... ('+reasoning.length+'字)';
@@ -1004,12 +1003,11 @@ function qaStreamReply(conv,apiMsgs){
             }
         },
         function(err,rFinal,cFinal){
-            var ld=document.getElementById('qaLoading');if(ld)ld.remove();
-            if(err){qaAddMsg('❌ '+err,'ai');return}
+            if(err){contentDiv.innerHTML='<span style="color:var(--accent3)">❌ '+esc(err)+'</span>';return}
             if(rFinal)thinkingLabel.textContent='💭 思考完成 ('+rFinal.length+'字)';
             if(cFinal){conv.messages.push({role:'assistant',content:cFinal});qaSave()}
-            else if(rFinal&&!cFinal){thinkingLabel.textContent='💭 思考完成但未生成回答，请重试'}
-            box.appendChild(msgDiv);box.scrollTop=box.scrollHeight;
+            else if(rFinal&&!cFinal){contentDiv.innerHTML='<span style="color:var(--text-muted)">💭 思考完成但未生成回答，请重试</span>'}
+            box.scrollTop=box.scrollHeight;
         }
     );
 }
