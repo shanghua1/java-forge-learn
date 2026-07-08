@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -143,6 +143,17 @@
     .pe-fb code{font-size:0.84rem}
     .pe-fb pre{margin:0.5rem 0 0;background:rgba(0,0,0,0.03);border:1px solid var(--border-light)}
     .pe-fb pre code{font-size:0.84rem}
+    .diff-container{margin-top:0.8rem;border:1.5px solid var(--border);border-radius:10px;overflow:hidden}
+    .diff-row{display:flex;font-family:'JetBrains Mono',monospace;font-size:0.82rem;line-height:1.7}
+    .diff-row-header{background:var(--bg);padding:0.4rem 0.8rem;font-weight:600;font-size:0.78rem;color:var(--text-muted);border-bottom:1px solid var(--border-light)}
+    .diff-row-header.del{color:var(--accent3);background:rgba(199,92,92,0.04)}
+    .diff-row-header.add{color:var(--accent);background:rgba(91,138,114,0.04)}
+    .diff-gutter{width:2.5rem;min-width:2.5rem;text-align:right;padding:0 0.5rem;color:var(--text-muted);background:rgba(0,0,0,0.02);border-right:1px solid var(--border-light);user-select:none}
+    .diff-code{flex:1;padding:0 0.6rem;white-space:pre;overflow-x:auto}
+    .diff-code .del{background:rgba(199,92,92,0.12);color:var(--accent3);text-decoration:line-through}
+    .diff-code .add{background:rgba(91,138,114,0.12);color:var(--accent)}
+    .diff-code .eq{color:var(--text)}
+    .diff-sep{height:1px;background:var(--border-light);margin:0.3rem 0}
     .pe-rv{display:none;margin-top:1rem;background:rgba(91,138,114,0.04);border:1.5px solid var(--accent);border-radius:10px;padding:1.2rem 1.4rem}
     .pe-rv.show{display:block}
     .pe-rv-title{font-size:1rem;font-weight:600;color:var(--accent);margin-bottom:0.8rem}
@@ -808,6 +819,40 @@ function restorePracticeState(lid){
     s.current=startPos;peLoad(lid);
 }
 
+// ── Codefix Diff ──
+function charDiff(a,b){
+    var m=a.length,n=b.length,dp=[];
+    for(var i=0;i<=m;i++){dp[i]=[];for(var j=0;j<=n;j++){dp[i][j]=i===0?j:j===0?i:0}}
+    for(var i=1;i<=m;i++)for(var j=1;j<=n;j++){dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1])}
+    var ops=[],i=m,j=n;
+    while(i>0||j>0){
+        if(i>0&&j>0&&a[i-1]===b[j-1]){ops.unshift({type:'eq',char:a[i-1]});i--;j--}
+        else if(j>0&&(i===0||dp[i][j-1]+1===dp[i][j])){ops.unshift({type:'add',char:b[j-1]});j--}
+        else if(i>0&&(j===0||dp[i-1][j]+1===dp[i][j])){ops.unshift({type:'del',char:a[i-1]});i--}
+        else{ops.unshift({type:'eq',char:a[i-1]});i--;j--}
+    }
+    return ops;
+}
+
+function renderDiff(buggy,fixed){
+    var ops=charDiff(buggy,fixed);
+    function escChar(c){if(c==='<')return'&lt;';if(c==='>')return'&gt;';if(c==='&')return'&amp;';if(c==='"')return'&quot;';return c}
+    var buggyHtml='',fixedHtml='',delNum=0,addNum=0;
+    ops.forEach(function(op){
+        if(op.type==='eq'){buggyHtml+='<span class="eq">'+escChar(op.char)+'</span>';fixedHtml+='<span class="eq">'+escChar(op.char)+'</span>'}
+        else if(op.type==='del'){buggyHtml+='<span class="del">'+escChar(op.char)+'</span>';delNum++}
+        else if(op.type==='add'){fixedHtml+='<span class="add">'+escChar(op.char)+'</span>';addNum++}
+    });
+    var html='<div class="diff-container">';
+    html+='<div class="diff-row-header del">❌ 你的代码（'+delNum+' 处错误/多余）</div>';
+    html+='<div class="diff-row"><div class="diff-gutter"></div><div class="diff-code">'+buggyHtml+'</div></div>';
+    html+='<div class="diff-sep"></div>';
+    html+='<div class="diff-row-header add">✅ 正确代码（'+addNum+' 处遗漏/修正）</div>';
+    html+='<div class="diff-row"><div class="diff-gutter"></div><div class="diff-code">'+fixedHtml+'</div></div>';
+    html+='</div>';
+    return html;
+}
+
 // ── Codefix ──
 var codefixPages={};
 function codefixPage(lid,dir){codefixPages[lid]=(codefixPages[lid]||0)+dir;renderCodefixPage(lid)}
@@ -838,9 +883,9 @@ function renderCodefixPage(lid){
     prev.style.display=page>0?'':'none';next.style.display=page<totalPages-1?'':'none';info.textContent=(page+1)+' / '+totalPages;
 }
 
-function codefixCheck(lid,fi){var c=COURSE[lid-1],cf=c.codefix[fi],ta=document.getElementById('cfta'+lid+'_'+fi),fb=document.getElementById('cffb'+lid+'_'+fi),code=ta.value;if(!code.trim()){fb.className='pe-fb show no';fb.innerHTML='请先写修复内容～';return}if(peNormalize(code)===peNormalize(cf.fixed)){fb.className='pe-fb show ok';fb.innerHTML='✅ 修复正确！(☆▽☆)';ta.disabled=true;if(cf.review){var rv=document.getElementById('cfrv'+lid+'_'+fi);rv.innerHTML='<div class="pe-rv-title">📝 解析</div><pre><code>'+esc(cf.review)+'</code></pre>';rv.className='pe-rv show';rv.querySelectorAll('code').forEach(function(b){b.innerHTML=hl(b.textContent)})}var p=loadProgress();p.codefixDone=p.codefixDone||{};p.codefixDone[lid+'_'+fi]=true;localStorage.setItem(PROGRESS_KEY,JSON.stringify(p))}else{fb.className='pe-fb show no';fb.innerHTML='❌ 还没修对'}}
+function codefixCheck(lid,fi){var c=COURSE[lid-1],cf=c.codefix[fi],ta=document.getElementById('cfta'+lid+'_'+fi),fb=document.getElementById('cffb'+lid+'_'+fi),code=ta.value;if(!code.trim()){fb.className='pe-fb show no';fb.innerHTML='请先写修复内容～';return}if(peNormalize(code)===peNormalize(cf.fixed)){fb.className='pe-fb show ok';fb.innerHTML='✅ 修复正确！(☆▽☆)';ta.disabled=true;if(cf.review){var rv=document.getElementById('cfrv'+lid+'_'+fi);rv.innerHTML='<div class="pe-rv-title">📝 解析</div><pre><code>'+esc(cf.review)+'</code></pre>';rv.className='pe-rv show';rv.querySelectorAll('code').forEach(function(b){b.innerHTML=hl(b.textContent)})}var p=loadProgress();p.codefixDone=p.codefixDone||{};p.codefixDone[lid+'_'+fi]=true;localStorage.setItem(PROGRESS_KEY,JSON.stringify(p))}else{fb.className='pe-fb show no';fb.innerHTML='❌ 还没修对，看看哪里不同：'+renderDiff(peNormalize(code),peNormalize(cf.fixed))}}
 function codefixHint(lid,fi){var fb=document.getElementById('cffb'+lid+'_'+fi);fb.className='pe-fb show hint';fb.innerHTML='💡 '+mdInline(COURSE[lid-1].codefix[fi].hint)}
-function codefixAnswer(lid,fi){var fb=document.getElementById('cffb'+lid+'_'+fi);fb.className='pe-fb show hint';fb.innerHTML='参考答案：<pre><code>'+esc(COURSE[lid-1].codefix[fi].fixed)+'</code></pre>';fb.querySelectorAll('code').forEach(function(b){b.innerHTML=hl(b.textContent)})}
+function codefixAnswer(lid,fi){var c=COURSE[lid-1],cf=c.codefix[fi],ta=document.getElementById('cfta'+lid+'_'+fi),fb=document.getElementById('cffb'+lid+'_'+fi);var userCode=ta.value.trim()?peNormalize(ta.value):peNormalize(cf.buggy);fb.className='pe-fb show hint';fb.innerHTML='参考答案：'+renderDiff(userCode,peNormalize(cf.fixed))}
 
 function saveAICodefix(lid,q){var p=loadProgress();p.aiCodefix=p.aiCodefix||{};p.aiCodefix[lid]=(p.aiCodefix[lid]||[]).concat(q);localStorage.setItem(PROGRESS_KEY,JSON.stringify(p))}
 function loadAICodefix(lid){var p=loadProgress();return(p.aiCodefix&&p.aiCodefix[lid])||[]}
